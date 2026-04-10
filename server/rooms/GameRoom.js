@@ -317,7 +317,7 @@ export class GameRoom {
     const player = this.players.get(socketId);
     if (!player) return;
 
-    if (this.gameState.phase === 'lobby') {
+    if (this.gameState.phase === 'lobby' || this.gameState.phase === 'ended') {
       this.players.delete(socketId);
       // Transfer host if needed
       if (socketId === this.hostSocketId && this.players.size > 0) {
@@ -325,7 +325,9 @@ export class GameRoom {
         newHost.isHost = true;
         this.hostSocketId = newHost.id;
       }
-      this._broadcastLobbyState();
+      if (this.gameState.phase === 'lobby') {
+        this._broadcastLobbyState();
+      }
     } else {
       // During game, treat as elimination
       if (!player.eliminated) {
@@ -336,6 +338,38 @@ export class GameRoom {
 
   _broadcastLobbyState() {
     this.io.to(this.roomId).emit('lobby:update', this.getLobbyData());
+  }
+
+  // ── Reset room back to lobby so same group can play again ──────────────────
+  resetToLobby() {
+    if (this.gameState.phase === 'playing') {
+      this.cleanup(); // stop any running timers first
+    }
+
+    // Reset game state phase
+    this.gameState.phase = 'lobby';
+    this.gameState.startedAt = null;
+
+    // Reset every player back to fresh state — keep names, ids, host status
+    for (const player of this.players.values()) {
+      player.eliminated    = false;
+      player.eliminatedAt  = null;
+      player.hp            = 80;
+      player.maxHp         = 80;
+      player.tier          = 'B';
+      player.shieldActive  = false;
+      player.speedBoost    = false;
+      player.position      = { x: 0, y: 0.5, z: 0 };
+      player.lastAttackTime = 0;
+    }
+
+    // Clear active power-ups
+    this.activePowerups.clear();
+
+    // Broadcast updated lobby to all players in the room
+    this._broadcastLobbyState();
+
+    console.log(`[GameRoom ${this.roomId}] Reset to lobby`);
   }
 
   cleanup() {

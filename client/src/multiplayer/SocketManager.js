@@ -13,7 +13,20 @@ export function SocketManager() {
 
     socket.on('lobby:update', (data) => {
       const isHost = data.hostId === socket.id;
-      useGameStore.setState({ players: data.players, roomId: data.roomId, isHost });
+      const currentScreen = useGameStore.getState().screen;
+      // If we're on the end screen and the host resets, bring everyone back to lobby
+      const nextScreen = currentScreen === 'ended' || currentScreen === 'spectator'
+        ? 'lobby'
+        : currentScreen === 'game' ? 'lobby' : currentScreen;
+      useGameStore.setState({
+        players: data.players,
+        roomId: data.roomId,
+        isHost,
+        // Only switch screen if the game has been reset (phase back to lobby)
+        ...(data.phase === 'lobby' && currentScreen !== 'menu' && currentScreen !== 'lobby'
+          ? { screen: 'lobby', gamePhase: 'lobby', winner: null, powerups: [] }
+          : {}),
+      });
     });
 
     socket.on('game:start', (data) => {
